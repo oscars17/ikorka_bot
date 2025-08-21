@@ -1,0 +1,10 @@
+SHARE_CONTACT_BUTTON_TEXT = "Поделиться контактом"
+NEW_ORDER_BUTTON_TEXT = "Сделать новый заказ"
+FAQ_BUTTON_TEXT = "Часто задаваемые вопросы"
+START_ORDER_BUTTON_TEXT = "Сделать заказ"
+
+QUANTITY_TEXT = "Количество"
+ADDRESS_TEXT = "Адрес"
+NAME_TEXT = "Имя"
+PHONE_TEXT = "Телефон"
+EXTRA_INFO_TEXT = "Дополнительная информация"
