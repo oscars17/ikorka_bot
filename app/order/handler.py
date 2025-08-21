@@ -64,7 +64,6 @@ async def _check_and_handle_idle(message: Message, state: FSMContext) -> bool:
 
         # If there is no timestamp yet, set it and allow processing to continue
         if last_activity_at is None:
-            await _touch_activity(state)
             return False
 
         # Normalize possible string value from storage
@@ -72,7 +71,6 @@ async def _check_and_handle_idle(message: Message, state: FSMContext) -> bool:
             try:
                 last_activity_at = float(str(last_activity_at))
             except Exception:
-                await _touch_activity(state)
                 return False
 
         idle_seconds = max(0, int(time.time() - float(last_activity_at)))
@@ -88,11 +86,6 @@ async def _check_and_handle_idle(message: Message, state: FSMContext) -> bool:
         logging.exception("Idle check failed")
     return False
 
-
-async def _touch_activity(state: FSMContext) -> None:
-    await state.update_data(last_activity_at=time.time())
-
-
 def _normalize_phone(phone: Optional[str]) -> str:
     if not phone:
         return "—"
@@ -105,6 +98,7 @@ def _build_order_message_for_user(
     name_text: str,
     address_text: str,
     phone_text: Optional[str],
+    manual_phone_text: Optional[str],
     extra_info_text: Optional[str],
 ) -> str:
     full_name = user.full_name
@@ -124,7 +118,8 @@ def _build_order_message_for_user(
         f"Username: {username}\n"
         f"User ID: {user_id}\n"
         f"Профиль: {profile_link}\n\n"
-        f"Телефон: {phone_text}\n"
+        f"Телефон (контакт): {phone_text}\n"
+        f"Телефон (ручной ввод): {manual_phone_text}\n"
         f"ФИО получателя: {name_text}\n"
         f"Адрес: {address_text}\n"
         f"Количество: {quantity_text}\n"
@@ -149,7 +144,6 @@ class OrderHandler:
         logging.info("handle_start called for user %s", message.from_user.id if message.from_user else "unknown")
         await state.clear()
         await state.set_state(OrderStates.waiting_for_order_start)
-        await _touch_activity(state)
         await message.answer(
             "Привет! Нажмите «Сделать заказ», чтобы начать оформление.",
             reply_markup=_build_main_keyboard(),
@@ -159,7 +153,6 @@ class OrderHandler:
     async def handle_start_order(message: Message, state: FSMContext) -> None:
         if await _check_and_handle_idle(message, state):
             return
-        await _touch_activity(state)
         await state.set_state(OrderStates.waiting_for_contact)
         await message.answer(
             'Нажмите на кнопку "Поделиться контактом", чтобы мы могли с вами связаться.',
@@ -194,7 +187,6 @@ class OrderHandler:
     async def handle_contact(message: Message, state: FSMContext) -> None:
         if await _check_and_handle_idle(message, state):
             return
-        await _touch_activity(state)
         contact = message.contact
         if not contact or not contact.user_id:
             await message.answer(
@@ -231,7 +223,6 @@ class OrderHandler:
         if not text.isdigit() or int(text) <= 0:
             await message.answer("Пожалуйста, введите положительное число, например: 2")
             return
-        await _touch_activity(state)
         await state.update_data(quantity=text)
         await state.set_state(OrderStates.waiting_for_name)
         await message.answer("Укажите ФИО получателя")
@@ -242,7 +233,6 @@ class OrderHandler:
             return
         if not message.text:
             return
-        await _touch_activity(state)
         await state.update_data(full_name=message.text.strip())
         await state.set_state(OrderStates.waiting_for_address)
         await message.answer("Укажите адрес доставки (город, улица, дом, кв., подъезд, этаж)")
@@ -253,7 +243,6 @@ class OrderHandler:
             return
         if not message.text:
             return
-        await _touch_activity(state)
         await state.update_data(address=message.text.strip())
         await state.set_state(OrderStates.waiting_for_phone)
         await message.answer(
@@ -269,12 +258,7 @@ class OrderHandler:
         phone_text: Optional[str] = None
         if message.text:
             phone_text = message.text.strip()
-        if message.contact and message.contact.phone_number:
-            phone_text = message.contact.phone_number
-
-        # Save phone and move to extra info step
-        await _touch_activity(state)
-        await state.update_data(phone=phone_text)
+        await state.update_data(manual_phone=phone_text)
         await state.set_state(OrderStates.waiting_for_extra_info)
         await message.answer(
             "Добавьте дополнительную информацию по заказу (по желанию). Если нет — отправьте «-».",
@@ -294,6 +278,7 @@ class OrderHandler:
         name_text: str = str(data.get("full_name") or "—")
         address_text: str = str(data.get("address") or "—")
         phone_text: Optional[str] = data.get("phone")  # type: ignore[assignment]
+        manual_phone_text: Optional[str] = data.get("manual_phone")
 
         try:
             user = message.from_user
@@ -304,6 +289,7 @@ class OrderHandler:
                 name_text=name_text,
                 address_text=address_text,
                 phone_text=phone_text,
+                manual_phone_text=manual_phone_text,
                 extra_info_text=extra_text,
             )
             channel_id = _resolve_target_channel_id()
