@@ -162,7 +162,7 @@ class OrderHandler:
         await _touch_activity(state)
         await state.set_state(OrderStates.waiting_for_contact)
         await message.answer(
-            'Нажмите на кнопку "Поделиться контактом", чтобы мы могли с вами связаться.,
+            'Нажмите на кнопку "Поделиться контактом", чтобы мы могли с вами связаться.',
             reply_markup=_build_contact_keyboard(),
         )
 
