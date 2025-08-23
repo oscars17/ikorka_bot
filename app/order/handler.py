@@ -13,7 +13,12 @@ from aiogram.types import (
 from aiogram.fsm.context import FSMContext
 from aiogram import Bot
 
-from app.order.consts import SHARE_CONTACT_BUTTON_TEXT, NEW_ORDER_BUTTON_TEXT, FAQ_BUTTON_TEXT, START_ORDER_BUTTON_TEXT
+from app.order.consts import (
+    SHARE_CONTACT_BUTTON_TEXT,
+    NEW_ORDER_BUTTON_TEXT,
+    FAQ_BUTTON_TEXT,
+    START_ORDER_BUTTON_TEXT
+)
 from app.order.states import OrderStates
 
 
@@ -38,9 +43,6 @@ def _build_contact_keyboard() -> ReplyKeyboardMarkup:
     )
 
 
-_IDLE_THRESHOLD_SECONDS: int = 9 * 60  # 9 minutes
-
-
 async def _send_idle_timeout_message(bot: Bot, user_id: int) -> None:
     """Send timeout message to user and clear their state."""
     try:
@@ -51,40 +53,6 @@ async def _send_idle_timeout_message(bot: Bot, user_id: int) -> None:
         )
     except Exception as exc:
         logging.exception("Failed to send idle timeout message to user %s: %s", user_id, exc)
-
-
-async def _check_and_handle_idle(message: Message, state: FSMContext) -> bool:
-    """Returns True if user was idle longer than threshold and we handled it.
-
-    Clears state and asks the user to restart with /start.
-    """
-    try:
-        data = await state.get_data()
-        last_activity_at = data.get("last_activity_at")
-
-        # If there is no timestamp yet, set it and allow processing to continue
-        if last_activity_at is None:
-            return False
-
-        # Normalize possible string value from storage
-        if not isinstance(last_activity_at, (int, float)):
-            try:
-                last_activity_at = float(str(last_activity_at))
-            except Exception:
-                return False
-
-        idle_seconds = max(0, int(time.time() - float(last_activity_at)))
-        if idle_seconds >= _IDLE_THRESHOLD_SECONDS:
-            await state.clear()
-            await message.answer(
-                "Похоже, вы были в простое более 9 минут. Чтобы начать заново, отправьте /start",
-                reply_markup=ReplyKeyboardRemove(),
-            )
-            return True
-    except Exception:
-        # Non-fatal: proceed normally if anything goes wrong
-        logging.exception("Idle check failed")
-    return False
 
 def _normalize_phone(phone: Optional[str]) -> str:
     if not phone:
@@ -151,8 +119,6 @@ class OrderHandler:
 
     @staticmethod
     async def handle_start_order(message: Message, state: FSMContext) -> None:
-        if await _check_and_handle_idle(message, state):
-            return
         await state.set_state(OrderStates.waiting_for_contact)
         await message.answer(
             'Нажмите на кнопку "Поделиться контактом", чтобы мы могли с вами связаться.',
@@ -185,8 +151,6 @@ class OrderHandler:
 
     @staticmethod
     async def handle_contact(message: Message, state: FSMContext) -> None:
-        if await _check_and_handle_idle(message, state):
-            return
         contact = message.contact
         if not contact or not contact.user_id:
             await message.answer(
@@ -215,8 +179,6 @@ class OrderHandler:
 
     @staticmethod
     async def handle_quantity(message: Message, state: FSMContext) -> None:
-        if await _check_and_handle_idle(message, state):
-            return
         if not message.text:
             return
         text = message.text.strip()
@@ -229,8 +191,6 @@ class OrderHandler:
 
     @staticmethod
     async def handle_name(message: Message, state: FSMContext) -> None:
-        if await _check_and_handle_idle(message, state):
-            return
         if not message.text:
             return
         await state.update_data(full_name=message.text.strip())
@@ -239,8 +199,6 @@ class OrderHandler:
 
     @staticmethod
     async def handle_address(message: Message, state: FSMContext) -> None:
-        if await _check_and_handle_idle(message, state):
-            return
         if not message.text:
             return
         await state.update_data(address=message.text.strip())
@@ -252,8 +210,6 @@ class OrderHandler:
 
     @staticmethod
     async def handle_phone(message: Message, state: FSMContext, bot: Bot) -> None:
-        if await _check_and_handle_idle(message, state):
-            return
         # Accept either text or previously shared contact
         phone_text: Optional[str] = None
         if message.text:
@@ -267,8 +223,6 @@ class OrderHandler:
 
     @staticmethod
     async def handle_extra_info(message: Message, state: FSMContext, bot: Bot) -> None:
-        if await _check_and_handle_idle(message, state):
-            return
         extra_text = (message.text or "").strip()
         if extra_text == "-":
             extra_text = ""
@@ -309,6 +263,4 @@ class OrderHandler:
 
     @staticmethod
     async def handle_new_order(message: Message, state: FSMContext) -> None:
-        if await _check_and_handle_idle(message, state):
-            return
         await OrderHandler.handle_start(message, state)
