@@ -75,7 +75,7 @@ def build_router() -> Router:
     async def fallback(message: Message, state: FSMContext):
         await state.clear()
         await message.answer(
-            "⚠️ Я не понял ваш запрос. Начните заново — /start"
+            "⚠️ Мы обновили бота. Пожалуйста, начните заново — /start"
         )
 
     # === Глобальный обработчик ошибок ===
@@ -85,7 +85,7 @@ def build_router() -> Router:
 
         if update.message:
             await update.message.answer(
-                "⚠️ Произошла ошибка. Пожалуйста, начните заново — /start"
+                "⚠️ Мы обновили бота. Пожалуйста, начните заново — /start"
             )
 
         # Сбрасываем FSM, чтобы избежать зависаний
