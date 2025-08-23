@@ -1,7 +1,6 @@
 from typing import Optional
 import logging
 import os
-import time
 
 from aiogram.types import (
     KeyboardButton,
