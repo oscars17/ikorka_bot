@@ -6,6 +6,7 @@ from typing import Optional
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
+from db import create_pool
 
 # твой роутер
 from app.order.routes import build_router
@@ -83,7 +84,9 @@ def create_bot(settings: Settings) -> Bot:
     )
 
 
-def create_dispatcher(storage=None) -> Dispatcher:
+async def create_dispatcher(storage=None) -> Dispatcher:
     if storage is None:
-        return Dispatcher()
+        dp = Dispatcher()
+        dp.workflow_data.update(db_pool=await create_pool())
+        return dp
     return Dispatcher(storage=storage)

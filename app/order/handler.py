@@ -2,12 +2,13 @@ from typing import Optional
 import logging
 import os
 
+from db import insert_order
 from aiogram.types import (
     KeyboardButton,
     Message,
     ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
-    User,
+    User
 )
 from aiogram.fsm.context import FSMContext
 from aiogram import Bot
@@ -19,6 +20,8 @@ from app.order.consts import (
     START_ORDER_BUTTON_TEXT
 )
 from app.order.states import OrderStates
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 
 def _build_main_keyboard() -> ReplyKeyboardMarkup:
@@ -53,6 +56,7 @@ async def _send_idle_timeout_message(bot: Bot, user_id: int) -> None:
     except Exception as exc:
         logging.exception("Failed to send idle timeout message to user %s: %s", user_id, exc)
 
+
 def _normalize_phone(phone: Optional[str]) -> str:
     if not phone:
         return "—"
@@ -67,6 +71,8 @@ def _build_order_message_for_user(
     phone_text: Optional[str],
     manual_phone_text: Optional[str],
     extra_info_text: Optional[str],
+    datetime_moscow: str,
+    datetime_khabarovsk: str
 ) -> str:
     full_name = user.full_name
     username: str = f"@{user.username}" if user.username else "—"
@@ -81,10 +87,12 @@ def _build_order_message_for_user(
 
     formatted = (
         "Новый заказ\n\n"
+        f"Дата и время Москва {datetime_moscow}\n"
+        f"Дата и время Хабаровск {datetime_khabarovsk}\n\n"
         f"Имя в Telegram: {full_name}\n"
         f"Username: {username}\n"
         f"User ID: {user_id}\n"
-        f"Профиль: {profile_link}\n\n"
+        f"Профиль: {profile_link}\n"
         f"Телефон (контакт): {phone_text}\n"
         f"Телефон (ручной ввод): {manual_phone_text}\n"
         f"ФИО получателя: {name_text}\n"
@@ -208,7 +216,7 @@ class OrderHandler:
         )
 
     @staticmethod
-    async def handle_phone(message: Message, state: FSMContext, bot: Bot) -> None:
+    async def handle_phone(message: Message, state: FSMContext) -> None:
         # Accept either text or previously shared contact
         phone_text: Optional[str] = None
         if message.text:
@@ -233,17 +241,37 @@ class OrderHandler:
         phone_text: Optional[str] = data.get("phone")  # type: ignore[assignment]
         manual_phone_text: Optional[str] = data.get("manual_phone")
 
+        user = message.from_user
+        moscow_time = datetime.now(ZoneInfo("Europe/Moscow"))
+        khabarovsk_time = datetime.now(ZoneInfo("Asia/Vladivostok"))
+        assert user is not None
+        pool = message.conf.get('db_pool')
         try:
-            user = message.from_user
-            assert user is not None
+            await insert_order(
+                pool=pool,
+                tg_user_id=user.id,
+                full_name=user.full_name,
+                username=user.username,
+                profile_link=f"tg://user?id={user.id}",
+                phone_contact=phone_text,
+                phone_manual=manual_phone_text,
+                fio_receiver=name_text,
+                address=address_text,
+                quantity=quantity_text,
+                extra_info=extra_text,
+                datetime_moscow=moscow_time,
+                datetime_khabarovsk=khabarovsk_time
+            )
             formatted = _build_order_message_for_user(
+                datetime_moscow=moscow_time.strftime("%Y-%m-%d %H:%M"),
+                datetime_khabarovsk=khabarovsk_time.strftime("%Y-%m-%d %H:%M"),
                 user=user,
                 quantity_text=quantity_text,
                 name_text=name_text,
                 address_text=address_text,
                 phone_text=phone_text,
                 manual_phone_text=manual_phone_text,
-                extra_info_text=extra_text,
+                extra_info_text=extra_text
             )
             channel_id = _resolve_target_channel_id()
             await bot.send_message(chat_id=channel_id, text=formatted)
