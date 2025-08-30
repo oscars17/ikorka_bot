@@ -2,13 +2,12 @@ from typing import Optional
 import logging
 import os
 
-from db import insert_order
 from aiogram.types import (
     KeyboardButton,
     Message,
     ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
-    User
+    User,
 )
 from aiogram.fsm.context import FSMContext
 from aiogram import Bot
@@ -216,7 +215,7 @@ class OrderHandler:
         )
 
     @staticmethod
-    async def handle_phone(message: Message, state: FSMContext) -> None:
+    async def handle_phone(message: Message, state: FSMContext, bot: Bot) -> None:
         # Accept either text or previously shared contact
         phone_text: Optional[str] = None
         if message.text:
@@ -241,37 +240,21 @@ class OrderHandler:
         phone_text: Optional[str] = data.get("phone")  # type: ignore[assignment]
         manual_phone_text: Optional[str] = data.get("manual_phone")
 
-        user = message.from_user
-        moscow_time = datetime.now(ZoneInfo("Europe/Moscow"))
-        khabarovsk_time = datetime.now(ZoneInfo("Asia/Vladivostok"))
-        assert user is not None
-        pool = message.conf.get('db_pool')
         try:
-            await insert_order(
-                pool=pool,
-                tg_user_id=user.id,
-                full_name=user.full_name,
-                username=user.username,
-                profile_link=f"tg://user?id={user.id}",
-                phone_contact=phone_text,
-                phone_manual=manual_phone_text,
-                fio_receiver=name_text,
-                address=address_text,
-                quantity=quantity_text,
-                extra_info=extra_text,
-                datetime_moscow=moscow_time,
-                datetime_khabarovsk=khabarovsk_time
-            )
+            moscow_time = datetime.now(ZoneInfo("Europe/Moscow")).strftime("%Y-%m-%d %H:%M")
+            khabarovsk_time = datetime.now(ZoneInfo("Asia/Vladivostok")).strftime("%Y-%m-%d %H:%M")
+            user = message.from_user
+            assert user is not None
             formatted = _build_order_message_for_user(
-                datetime_moscow=moscow_time.strftime("%Y-%m-%d %H:%M"),
-                datetime_khabarovsk=khabarovsk_time.strftime("%Y-%m-%d %H:%M"),
+                datetime_moscow=moscow_time,
+                datetime_khabarovsk=khabarovsk_time,
                 user=user,
                 quantity_text=quantity_text,
                 name_text=name_text,
                 address_text=address_text,
                 phone_text=phone_text,
                 manual_phone_text=manual_phone_text,
-                extra_info_text=extra_text
+                extra_info_text=extra_text,
             )
             channel_id = _resolve_target_channel_id()
             await bot.send_message(chat_id=channel_id, text=formatted)
