@@ -15,7 +15,7 @@ async def main() -> None:
     bot = create_bot(settings)
 
     storage = make_storage_from_env(logger)
-    dp = await create_dispatcher(storage)
+    dp = create_dispatcher(storage)
 
     setup_routes(dp)
 
