@@ -40,9 +40,9 @@ class Settings:
         return Settings(bot_token=token, target_channel_id=channel_id)
 
 
-def setup_routes(dp: Dispatcher) -> None:
+async def setup_routes(dp: Dispatcher) -> None:
     """Подключаем роуты — как у тебя было."""
-    dp.include_router(build_router())
+    dp.include_router(await build_router())
 
 
 def make_storage_from_env(logger: Optional[logging.Logger] = None):
@@ -85,5 +85,6 @@ def create_bot(settings: Settings) -> Bot:
 
 def create_dispatcher(storage=None) -> Dispatcher:
     if storage is None:
-        return Dispatcher()
+        dp = Dispatcher()
+        return dp
     return Dispatcher(storage=storage)

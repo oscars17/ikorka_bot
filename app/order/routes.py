@@ -11,62 +11,66 @@ from app.order.consts import (
     FAQ_BUTTON_TEXT,
     START_ORDER_BUTTON_TEXT,
 )
+from db import create_pool
 
+async def build_router() -> Router:
+    db_pool = await create_pool()
 
-def build_router() -> Router:
     router = Router()
 
+    order_handler = OrderHandler(db_pool=db_pool)
+
     # === Основные хэндлеры ===
-    router.message.register(OrderHandler.handle_start, CommandStart())
-    router.message.register(OrderHandler.handle_faq, F.text == FAQ_BUTTON_TEXT)
+    router.message.register(order_handler.handle_start, CommandStart())
+    router.message.register(order_handler.handle_faq, F.text == FAQ_BUTTON_TEXT)
 
     router.message.register(
-        OrderHandler.handle_start_order,
+        order_handler.handle_start_order,
         StateFilter(OrderStates.waiting_for_order_start),
         F.text == START_ORDER_BUTTON_TEXT,
     )
 
     # Contact at the first step
     router.message.register(
-        OrderHandler.handle_contact,
+        order_handler.handle_contact,
         F.contact,
         StateFilter(OrderStates.waiting_for_contact),
     )
 
     # Quantity, Name, Address by state
     router.message.register(
-        OrderHandler.handle_quantity,
+        order_handler.handle_quantity,
         StateFilter(OrderStates.waiting_for_quantity),
         F.text,
     )
     router.message.register(
-        OrderHandler.handle_name,
+        order_handler.handle_name,
         StateFilter(OrderStates.waiting_for_name),
         F.text,
     )
     router.message.register(
-        OrderHandler.handle_address,
+        order_handler.handle_address,
         StateFilter(OrderStates.waiting_for_address),
         F.text,
     )
 
     # Final phone step: text only (no contact button here)
     router.message.register(
-        OrderHandler.handle_phone,
+        order_handler.handle_phone,
         StateFilter(OrderStates.waiting_for_phone),
         F.text,
     )
 
     # Extra info step (final confirmation + send)
     router.message.register(
-        OrderHandler.handle_extra_info,
+        order_handler.handle_extra_info,
         StateFilter(OrderStates.waiting_for_extra_info),
         F.text,
     )
 
     # Restart flow via button
     router.message.register(
-        OrderHandler.handle_new_order,
+        order_handler.handle_new_order,
         F.text == NEW_ORDER_BUTTON_TEXT,
     )
 

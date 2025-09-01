@@ -17,7 +17,7 @@ async def main() -> None:
     storage = make_storage_from_env(logger)
     dp = create_dispatcher(storage)
 
-    setup_routes(dp)
+    await setup_routes(dp)
 
     logger.info("Bot is starting polling...")
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())

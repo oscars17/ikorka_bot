@@ -2,12 +2,13 @@ from typing import Optional
 import logging
 import os
 
+from db import insert_order
 from aiogram.types import (
     KeyboardButton,
     Message,
     ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
-    User,
+    User
 )
 from aiogram.fsm.context import FSMContext
 from aiogram import Bot
@@ -71,7 +72,8 @@ def _build_order_message_for_user(
     manual_phone_text: Optional[str],
     extra_info_text: Optional[str],
     datetime_moscow: str,
-    datetime_khabarovsk: str
+    datetime_khabarovsk: str,
+    order_id: int
 ) -> str:
     full_name = user.full_name
     username: str = f"@{user.username}" if user.username else "—"
@@ -85,9 +87,9 @@ def _build_order_message_for_user(
     extra_info_text = (extra_info_text or "").strip() or "—"
 
     formatted = (
-        "Новый заказ\n\n"
-        f"Дата и время Москва {datetime_moscow}\n"
-        f"Дата и время Хабаровск {datetime_khabarovsk}\n\n"
+        f"Новый заказ № {order_id} \n\n"
+        f"Время Москва {datetime_moscow}\n"
+        f"Время Хабаровск {datetime_khabarovsk}\n\n"
         f"Имя в Telegram: {full_name}\n"
         f"Username: {username}\n"
         f"User ID: {user_id}\n"
@@ -113,8 +115,10 @@ def _resolve_target_channel_id() -> int:
 
 
 class OrderHandler:
-    @staticmethod
-    async def handle_start(message: Message, state: FSMContext) -> None:
+    def __init__(self, db_pool):
+        self.db_pool = db_pool
+
+    async def handle_start(self, message: Message, state: FSMContext) -> None:
         logging.info("handle_start called for user %s", message.from_user.id if message.from_user else "unknown")
         await state.clear()
         await state.set_state(OrderStates.waiting_for_order_start)
@@ -123,16 +127,14 @@ class OrderHandler:
             reply_markup=_build_main_keyboard(),
         )
 
-    @staticmethod
-    async def handle_start_order(message: Message, state: FSMContext) -> None:
+    async def handle_start_order(self, message: Message, state: FSMContext) -> None:
         await state.set_state(OrderStates.waiting_for_contact)
         await message.answer(
             'Нажмите на кнопку "Поделиться контактом", чтобы мы могли с вами связаться.',
             reply_markup=_build_contact_keyboard(),
         )
 
-    @staticmethod
-    async def handle_faq(message: Message) -> None:
+    async def handle_faq(self, message: Message) -> None:
         text = (
             "<b>Где и когда была произведена икра?</b>\n"
             "Наша дальневосточная красная икра добывается из тихоокеанских лососевой рыбы горбуши в регионах Дальнего Востока России, преимущественно на Сахалине \n"
@@ -155,8 +157,7 @@ class OrderHandler:
         )
         await message.answer(text, parse_mode="HTML")
 
-    @staticmethod
-    async def handle_contact(message: Message, state: FSMContext) -> None:
+    async def handle_contact(self, message: Message, state: FSMContext) -> None:
         contact = message.contact
         if not contact or not contact.user_id:
             await message.answer(
@@ -183,8 +184,7 @@ class OrderHandler:
             parse_mode="HTML",
         )
 
-    @staticmethod
-    async def handle_quantity(message: Message, state: FSMContext) -> None:
+    async def handle_quantity(self, message: Message, state: FSMContext) -> None:
         if not message.text:
             return
         text = message.text.strip()
@@ -195,16 +195,14 @@ class OrderHandler:
         await state.set_state(OrderStates.waiting_for_name)
         await message.answer("Укажите ФИО получателя")
 
-    @staticmethod
-    async def handle_name(message: Message, state: FSMContext) -> None:
+    async def handle_name(self, message: Message, state: FSMContext) -> None:
         if not message.text:
             return
         await state.update_data(full_name=message.text.strip())
         await state.set_state(OrderStates.waiting_for_address)
         await message.answer("Укажите адрес доставки (город, улица, дом, кв., подъезд, этаж)")
 
-    @staticmethod
-    async def handle_address(message: Message, state: FSMContext) -> None:
+    async def handle_address(self, message: Message, state: FSMContext) -> None:
         if not message.text:
             return
         await state.update_data(address=message.text.strip())
@@ -214,8 +212,7 @@ class OrderHandler:
             reply_markup=ReplyKeyboardRemove(),
         )
 
-    @staticmethod
-    async def handle_phone(message: Message, state: FSMContext, bot: Bot) -> None:
+    async def handle_phone(self, message: Message, state: FSMContext) -> None:
         # Accept either text or previously shared contact
         phone_text: Optional[str] = None
         if message.text:
@@ -227,8 +224,7 @@ class OrderHandler:
             reply_markup=ReplyKeyboardRemove(),
         )
 
-    @staticmethod
-    async def handle_extra_info(message: Message, state: FSMContext, bot: Bot) -> None:
+    async def handle_extra_info(self, message: Message, state: FSMContext, bot: Bot) -> None:
         extra_text = (message.text or "").strip()
         if extra_text == "-":
             extra_text = ""
@@ -240,14 +236,35 @@ class OrderHandler:
         phone_text: Optional[str] = data.get("phone")  # type: ignore[assignment]
         manual_phone_text: Optional[str] = data.get("manual_phone")
 
+        user = message.from_user
+        # текущее время в UTC
+        now_utc = datetime.now(tz=ZoneInfo("UTC"))
+
+        # Москва
+        datetime_moscow = now_utc.astimezone(ZoneInfo("Europe/Moscow"))
+
+        # Хабаровск
+        datetime_khabarovsk = now_utc.astimezone(ZoneInfo("Asia/Vladivostok"))
+        assert user is not None
         try:
-            moscow_time = datetime.now(ZoneInfo("Europe/Moscow")).strftime("%Y-%m-%d %H:%M")
-            khabarovsk_time = datetime.now(ZoneInfo("Asia/Vladivostok")).strftime("%Y-%m-%d %H:%M")
-            user = message.from_user
-            assert user is not None
+            order_id = await insert_order(
+                pool=self.db_pool,
+                tg_user_id=user.id,
+                full_name=user.full_name,
+                username=user.username,
+                profile_link=f"tg://user?id={user.id}",
+                phone_contact=phone_text,
+                phone_manual=manual_phone_text,
+                fio_receiver=name_text,
+                address=address_text,
+                quantity=quantity_text,
+                extra_info=extra_text,
+                datetime_moscow=datetime_moscow,
+                datetime_khabarovsk=datetime_khabarovsk
+            )
             formatted = _build_order_message_for_user(
-                datetime_moscow=moscow_time,
-                datetime_khabarovsk=khabarovsk_time,
+                datetime_moscow=datetime_moscow.strftime("%Y-%m-%d %H:%M"),
+                datetime_khabarovsk=datetime_khabarovsk.strftime("%Y-%m-%d %H:%M"),
                 user=user,
                 quantity_text=quantity_text,
                 name_text=name_text,
@@ -255,6 +272,7 @@ class OrderHandler:
                 phone_text=phone_text,
                 manual_phone_text=manual_phone_text,
                 extra_info_text=extra_text,
+                order_id=order_id
             )
             channel_id = _resolve_target_channel_id()
             await bot.send_message(chat_id=channel_id, text=formatted)
@@ -271,6 +289,5 @@ class OrderHandler:
             ),
         )
 
-    @staticmethod
-    async def handle_new_order(message: Message, state: FSMContext) -> None:
-        await OrderHandler.handle_start(message, state)
+    async def handle_new_order(self, message: Message, state: FSMContext) -> None:
+        await self.handle_start(message, state)
