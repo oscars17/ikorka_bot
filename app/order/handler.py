@@ -168,12 +168,23 @@ class OrderHandler:
         await state.update_data(phone=contact.phone_number)
         await state.set_state(OrderStates.waiting_for_quantity)
         text = (
-            "Укажите количество упаковок (по 500 г). Введите число, например: 2 \n"
-            "---------------------------\n"
-            "Сейчас в наличии икра горбуши в фасовке 500г (вылов июль 2025) \n"
+            "Напишите, какие продукты и в каком количестве вам нужны: \n"
             "\n"
-            "Специальное предложение: \n"
-            "Обычная цена: <s>5000₽</s> → Для вас: <b>4000₽</b> за 500г \n"
+            "Икра горбуши (слабосолёная, вылов июль 2025): \n"
+            "\n"
+            "\n"
+            "250 г — 2 500 ₽; \n"
+            "500 г — 4 000 ₽. \n"
+            "\n"
+            "Морской гребешок (сырой, диаметр 6–8 см): \n"
+            "\n"
+            "500 г (7–9 шт.) — 2 300 ₽; \n"
+            "1 кг — 4 500 ₽. \n"
+            "\n"
+            "Фаланги камчатского краба (варёно‑мороженые, первая фаланга, размер 8–10 см): \n"
+            "\n"
+            "600 г — 4 500 ₽; \n"
+            "1,2 кг — 8 800 ₽. \n"
         )
         await message.answer(
             text,
@@ -185,9 +196,6 @@ class OrderHandler:
         if not message.text:
             return
         text = message.text.strip()
-        if not text.isdigit() or int(text) <= 0:
-            await message.answer("Пожалуйста, введите положительное число, например: 2")
-            return
         await state.update_data(quantity=text)
         await state.set_state(OrderStates.waiting_for_name)
         await message.answer("Укажите ФИО получателя")
