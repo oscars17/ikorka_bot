@@ -78,7 +78,6 @@ def _build_order_message_for_user(
     full_name = user.full_name
     username: str = f"@{user.username}" if user.username else "—"
     user_id: int = user.id
-    profile_link = f"tg://user?id={user_id}"
 
     quantity_text = (quantity_text or "").strip() or "—"
     name_text = (name_text or "").strip() or "—"
@@ -93,12 +92,11 @@ def _build_order_message_for_user(
         f"Имя в Telegram: {full_name}\n"
         f"Username: {username}\n"
         f"User ID: {user_id}\n"
-        f"Профиль: {profile_link}\n"
         f"Телефон (контакт): {phone_text}\n"
         f"Телефон (ручной ввод): {manual_phone_text}\n"
         f"ФИО получателя: {name_text}\n"
         f"Адрес: {address_text}\n"
-        f"Количество: {quantity_text}\n"
+        f"Заказ: {quantity_text}\n"
         f"Доп. информация: {extra_info_text}"
     )
     return formatted
@@ -168,12 +166,26 @@ class OrderHandler:
         await state.update_data(phone=contact.phone_number)
         await state.set_state(OrderStates.waiting_for_quantity)
         text = (
-            "Укажите количество упаковок (по 500 г). Введите число, например: 2 \n"
-            "---------------------------\n"
-            "Сейчас в наличии икра горбуши в фасовке 500г (вылов июль 2025) \n"
+            "Напишите, какие продукты и в каком количестве вам нужны: \n"
             "\n"
-            "Специальное предложение: \n"
-            "Обычная цена: <s>5000₽</s> → Для вас: <b>4000₽</b> за 500г \n"
+            "Икра горбуши (слабосолёная, вылов июль 2025): \n"
+            "\n"
+            "250 г — 2 500 ₽; \n"
+            "500 г — 4 000 ₽. \n"
+            "\n"
+            "Морской гребешок (сырой, диаметр 6–8 см): \n"
+            "\n"
+            "500 г (7–9 шт.) — 2 300 ₽; \n"
+            "1 кг — 4 500 ₽. \n"
+            "\n"
+            "Фаланги камчатского краба (варёно‑мороженые, первая фаланга, размер 8–10 см): \n"
+            "\n"
+            "600 г — 4 500 ₽; \n"
+            "1,2 кг — 8 800 ₽. \n"
+            "\n"
+            "Креветка Ботан (варено-мороженая, 800 гр., размер одной креветки 15–16 см)"
+            "\n"
+            "1 коробка (800 гр) — 3800 р."
         )
         await message.answer(
             text,
@@ -185,9 +197,6 @@ class OrderHandler:
         if not message.text:
             return
         text = message.text.strip()
-        if not text.isdigit() or int(text) <= 0:
-            await message.answer("Пожалуйста, введите положительное число, например: 2")
-            return
         await state.update_data(quantity=text)
         await state.set_state(OrderStates.waiting_for_name)
         await message.answer("Укажите ФИО получателя")
@@ -210,7 +219,6 @@ class OrderHandler:
         )
 
     async def handle_phone(self, message: Message, state: FSMContext) -> None:
-        # Accept either text or previously shared contact
         phone_text: Optional[str] = None
         if message.text:
             phone_text = message.text.strip()
@@ -249,7 +257,7 @@ class OrderHandler:
                 tg_user_id=user.id,
                 full_name=user.full_name,
                 username=user.username,
-                profile_link=f"tg://user?id={user.id}",
+                profile_link=f"{user.id}",
                 phone_contact=phone_text,
                 phone_manual=manual_phone_text,
                 fio_receiver=name_text,
